@@ -1,4 +1,5 @@
 import warnings
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import itertools
 import os
@@ -7,25 +8,28 @@ import argparse
 import json
 import torch
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DistributedSampler, DataLoader
 import torch.multiprocessing as mp
-from torch.distributed import init_process_group
+import wandb
+
+from torch.utils.data import DistributedSampler, DataLoader
+from torch.distributed import init_process_group, destroy_process_group
 from torch.nn.parallel import DistributedDataParallel
 from env import AttrDict, build_env
-from meldataset import MelDataset, mel_spectrogram, get_dataset_filelist
-from models import Generator, MultiPeriodDiscriminator, MultiScaleDiscriminator, feature_loss, generator_loss,\
+from meldataset import MelDataset, ComputeMel
+from models import Generator, MultiPeriodDiscriminator, MultiScaleDiscriminator, feature_loss, generator_loss, \
     discriminator_loss
 from utils import plot_spectrogram, scan_checkpoint, load_checkpoint, save_checkpoint
 from stft import TorchSTFT
+from tqdm import tqdm
 
 torch.backends.cudnn.benchmark = True
 
 
 def train(rank, a, h):
     if h.num_gpus > 1:
-        init_process_group(backend=h.dist_config['dist_backend'], init_method=h.dist_config['dist_url'],
-                           world_size=h.dist_config['world_size'] * h.num_gpus, rank=rank)
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '56789'
+        init_process_group("gloo", world_size=h.dist_config['world_size'] * h.num_gpus, rank=rank)
 
     torch.cuda.manual_seed(h.seed)
     device = torch.device('cuda:{:d}'.format(rank))
@@ -33,7 +37,11 @@ def train(rank, a, h):
     generator = Generator(h).to(device)
     mpd = MultiPeriodDiscriminator().to(device)
     msd = MultiScaleDiscriminator().to(device)
-    stft = TorchSTFT(filter_length=h.gen_istft_n_fft, hop_length=h.gen_istft_hop_size, win_length=h.gen_istft_n_fft).to(device)
+    stft = TorchSTFT(filter_length=h.gen_istft_n_fft, hop_length=h.gen_istft_hop_size, win_length=h.gen_istft_n_fft).to(
+        device)
+
+    compute_mel_spectrogram = ComputeMel(sample_rate=h.sampling_rate, n_fft=h.n_fft,
+                                         hop_length=h.hop_size, n_mels=h.num_mels, f_max=h.fmax)
 
     if rank == 0:
         print(generator)
@@ -73,12 +81,15 @@ def train(rank, a, h):
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=h.lr_decay, last_epoch=last_epoch)
     scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=h.lr_decay, last_epoch=last_epoch)
 
-    training_filelist, validation_filelist = get_dataset_filelist(a)
+    training_filelist = open(a.input_training_file).readlines()
+    training_filelist = [i[:-1] for i in training_filelist]
+    validation_filelist = open(a.input_validation_file).readlines()
+    validation_filelist = [i[:-1] for i in validation_filelist]
 
     trainset = MelDataset(training_filelist, h.segment_size, h.n_fft, h.num_mels,
-                          h.hop_size, h.win_size, h.sampling_rate, h.fmin, h.fmax, n_cache_reuse=0,
+                          h.hop_size, h.win_size, h.sampling_rate, h.fmin, h.fmax,
                           shuffle=False if h.num_gpus > 1 else True, fmax_loss=h.fmax_for_loss, device=device,
-                          fine_tuning=a.fine_tuning, base_mels_path=a.input_mels_dir)
+                          base_mels_path=a.input_mels_dir)
 
     train_sampler = DistributedSampler(trainset) if h.num_gpus > 1 else None
 
@@ -90,8 +101,8 @@ def train(rank, a, h):
 
     if rank == 0:
         validset = MelDataset(validation_filelist, h.segment_size, h.n_fft, h.num_mels,
-                              h.hop_size, h.win_size, h.sampling_rate, h.fmin, h.fmax, False, False, n_cache_reuse=0,
-                              fmax_loss=h.fmax_for_loss, device=device, fine_tuning=a.fine_tuning,
+                              h.hop_size, h.win_size, h.sampling_rate, h.fmin, h.fmax, False, False,
+                              fmax_loss=h.fmax_for_loss, device=device,
                               base_mels_path=a.input_mels_dir)
         validation_loader = DataLoader(validset, num_workers=1, shuffle=False,
                                        sampler=None,
@@ -99,35 +110,30 @@ def train(rank, a, h):
                                        pin_memory=True,
                                        drop_last=True)
 
-        sw = SummaryWriter(os.path.join(a.checkpoint_path, 'logs'))
-
+    if rank == 0:
+        wandb.init(project=h["wandb"]["project"])
     generator.train()
     mpd.train()
     msd.train()
     for epoch in range(max(0, last_epoch), a.training_epochs):
         if rank == 0:
             start = time.time()
-            print("Epoch: {}".format(epoch+1))
+            print("Epoch: {}".format(epoch + 1))
 
         if h.num_gpus > 1:
             train_sampler.set_epoch(epoch)
 
-        for i, batch in enumerate(train_loader):
+        for i, batch in enumerate(tqdm(train_loader)):
             if rank == 0:
                 start_b = time.time()
             x, y, _, y_mel = batch
-            x = torch.autograd.Variable(x.to(device, non_blocking=True))
-            y = torch.autograd.Variable(y.to(device, non_blocking=True))
-            y_mel = torch.autograd.Variable(y_mel.to(device, non_blocking=True))
+            x = x.to(device)
+            y = y.to(device)
+            y_mel = y_mel.to(device)
             y = y.unsqueeze(1)
-            # y_g_hat = generator(x)
             spec, phase = generator(x)
-
             y_g_hat = stft.inverse(spec, phase)
-
-            y_g_hat_mel = mel_spectrogram(y_g_hat.squeeze(1), h.n_fft, h.num_mels, h.sampling_rate, h.hop_size, h.win_size,
-                                          h.fmin, h.fmax_for_loss)
-
+            y_g_hat_mel = compute_mel_spectrogram(y_g_hat.squeeze(1))
             optim_d.zero_grad()
 
             # MPD
@@ -161,13 +167,11 @@ def train(rank, a, h):
             optim_g.step()
 
             if rank == 0:
-                # STDOUT logging
-                if steps % a.stdout_interval == 0:
+                if steps % a.wandb_log_interval == 0:
                     with torch.no_grad():
                         mel_error = F.l1_loss(y_mel, y_g_hat_mel).item()
-
-                    print('Steps : {:d}, Gen Loss Total : {:4.3f}, Mel-Spec. Error : {:4.3f}, s/b : {:4.3f}'.
-                          format(steps, loss_gen_all, mel_error, time.time() - start_b))
+                    wandb.log({"train_loss/gen_total_loss": loss_gen_all})
+                    wandb.log({"train_loss/mel_error": mel_error})
 
                 # checkpointing
                 if steps % a.checkpoint_interval == 0 and steps != 0:
@@ -175,52 +179,42 @@ def train(rank, a, h):
                     save_checkpoint(checkpoint_path,
                                     {'generator': (generator.module if h.num_gpus > 1 else generator).state_dict()})
                     checkpoint_path = "{}/do_{:08d}".format(a.checkpoint_path, steps)
-                    save_checkpoint(checkpoint_path, 
+                    save_checkpoint(checkpoint_path,
                                     {'mpd': (mpd.module if h.num_gpus > 1
-                                                         else mpd).state_dict(),
+                                             else mpd).state_dict(),
                                      'msd': (msd.module if h.num_gpus > 1
-                                                         else msd).state_dict(),
+                                             else msd).state_dict(),
                                      'optim_g': optim_g.state_dict(), 'optim_d': optim_d.state_dict(), 'steps': steps,
                                      'epoch': epoch})
 
-                # Tensorboard summary logging
-                if steps % a.summary_interval == 0:
-                    sw.add_scalar("training/gen_loss_total", loss_gen_all, steps)
-                    sw.add_scalar("training/mel_spec_error", mel_error, steps)
-
                 # Validation
-                if steps % a.validation_interval == 0:  # and steps != 0:
+                if steps % a.validation_interval == 0: # and steps != 0:
                     generator.eval()
                     torch.cuda.empty_cache()
                     val_err_tot = 0
                     with torch.no_grad():
                         for j, batch in enumerate(validation_loader):
                             x, y, _, y_mel = batch
-                            # y_g_hat = generator(x.to(device))
                             spec, phase = generator(x.to(device))
 
                             y_g_hat = stft.inverse(spec, phase)
 
-                            y_mel = torch.autograd.Variable(y_mel.to(device, non_blocking=True))
-                            y_g_hat_mel = mel_spectrogram(y_g_hat.squeeze(1), h.n_fft, h.num_mels, h.sampling_rate,
-                                                          h.hop_size, h.win_size,
-                                                          h.fmin, h.fmax_for_loss)
+                            y_mel = y_mel.to(device)
+                            y_g_hat_mel = compute_mel_spectrogram(y_g_hat.squeeze(1))
                             val_err_tot += F.l1_loss(y_mel, y_g_hat_mel).item()
 
-                            if j <= 4:
-                                if steps == 0:
-                                    sw.add_audio('gt/y_{}'.format(j), y[0], steps, h.sampling_rate)
-                                    sw.add_figure('gt/y_spec_{}'.format(j), plot_spectrogram(x[0]), steps)
+                            if steps == 0:
+                                wandb.log(
+                                    {f"audio/{j}_gt": wandb.Audio(y[0].detach().cpu().numpy(),
+                                                                  caption=f"audio/{j}_gt",
+                                                                  sample_rate=h.sampling_rate)})
+                            wandb.log(
+                                {f"audio/{j}_generated": wandb.Audio(y_g_hat[0].squeeze(0).detach().cpu().numpy(),
+                                                                     caption=f"audio/{j}_generated",
+                                                                     sample_rate=h.sampling_rate)})
 
-                                sw.add_audio('generated/y_hat_{}'.format(j), y_g_hat[0], steps, h.sampling_rate)
-                                y_hat_spec = mel_spectrogram(y_g_hat.squeeze(1), h.n_fft, h.num_mels,
-                                                             h.sampling_rate, h.hop_size, h.win_size,
-                                                             h.fmin, h.fmax)
-                                sw.add_figure('generated/y_hat_spec_{}'.format(j),
-                                              plot_spectrogram(y_hat_spec.squeeze(0).cpu().numpy()), steps)
-
-                        val_err = val_err_tot / (j+1)
-                        sw.add_scalar("validation/mel_spec_error", val_err, steps)
+                        val_err = val_err_tot / (j + 1)
+                        wandb.log({"val_loss/mel_error": val_err})
 
                     generator.train()
 
@@ -228,7 +222,7 @@ def train(rank, a, h):
 
         scheduler_g.step()
         scheduler_d.step()
-        
+
         if rank == 0:
             print('Time taken for epoch {} is {} sec\n'.format(epoch + 1, int(time.time() - start)))
 
@@ -239,16 +233,17 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--group_name', default=None)
-    parser.add_argument('--input_wavs_dir', default='LJSpeech-1.1/wavs')
+    parser.add_argument('--input_wavs_dir', default=None)
     parser.add_argument('--input_mels_dir', default='ft_dataset')
-    parser.add_argument('--input_training_file', default='LJSpeech-1.1/training.txt')
-    parser.add_argument('--input_validation_file', default='LJSpeech-1.1/validation.txt')
+    parser.add_argument('--input_training_file',
+                        default='/root/storage/dasha/data/emo-data/esd/istft/train.txt')
+    parser.add_argument('--input_validation_file',
+                        default='/root/storage/dasha/data/emo-data/esd/istft/test.txt')
     parser.add_argument('--checkpoint_path', default='cp_hifigan')
-    parser.add_argument('--config', default='')
-    parser.add_argument('--training_epochs', default=3100, type=int)
-    parser.add_argument('--stdout_interval', default=5, type=int)
+    parser.add_argument('--config', default='config_esd.json')
+    parser.add_argument('--training_epochs', default=8900, type=int)
+    parser.add_argument('--wandb_log_interval', default=5, type=int)
     parser.add_argument('--checkpoint_interval', default=5000, type=int)
-    parser.add_argument('--summary_interval', default=100, type=int)
     parser.add_argument('--validation_interval', default=1000, type=int)
     parser.add_argument('--fine_tuning', default=False, type=bool)
 
@@ -259,12 +254,11 @@ def main():
 
     json_config = json.loads(data)
     h = AttrDict(json_config)
-    build_env(a.config, 'config.json', a.checkpoint_path)
+    build_env(a.config, 'config_esd.json', a.checkpoint_path)
 
     torch.manual_seed(h.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(h.seed)
-        h.num_gpus = torch.cuda.device_count()
         h.batch_size = int(h.batch_size / h.num_gpus)
         print('Batch size per GPU :', h.batch_size)
     else:
@@ -278,3 +272,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
