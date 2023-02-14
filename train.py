@@ -39,6 +39,9 @@ def train(rank, a, h):
     msd = MultiScaleDiscriminator().to(device)
     stft = TorchSTFT(filter_length=h.gen_istft_n_fft, hop_length=h.gen_istft_hop_size, win_length=h.gen_istft_n_fft).to(
         device)
+    optim_g = torch.optim.AdamW(generator.parameters(), h.learning_rate, betas=[h.adam_b1, h.adam_b2])
+    optim_d = torch.optim.AdamW(itertools.chain(msd.parameters(), mpd.parameters()),
+                                h.learning_rate, betas=[h.adam_b1, h.adam_b2])
 
     compute_mel_spectrogram = ComputeMel(sample_rate=h.sampling_rate, n_fft=h.n_fft,
                                          hop_length=h.hop_size, n_mels=h.num_mels, f_max=h.fmax)
@@ -64,19 +67,13 @@ def train(rank, a, h):
         msd.load_state_dict(state_dict_do['msd'])
         steps = state_dict_do['steps'] + 1
         last_epoch = state_dict_do['epoch']
+        optim_g.load_state_dict(state_dict_do['optim_g'])
+        optim_d.load_state_dict(state_dict_do['optim_d'])
 
     if h.num_gpus > 1:
         generator = DistributedDataParallel(generator, device_ids=[rank]).to(device)
         mpd = DistributedDataParallel(mpd, device_ids=[rank]).to(device)
         msd = DistributedDataParallel(msd, device_ids=[rank]).to(device)
-
-    optim_g = torch.optim.AdamW(generator.parameters(), h.learning_rate, betas=[h.adam_b1, h.adam_b2])
-    optim_d = torch.optim.AdamW(itertools.chain(msd.parameters(), mpd.parameters()),
-                                h.learning_rate, betas=[h.adam_b1, h.adam_b2])
-
-    if state_dict_do is not None:
-        optim_g.load_state_dict(state_dict_do['optim_g'])
-        optim_d.load_state_dict(state_dict_do['optim_d'])
 
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=h.lr_decay, last_epoch=last_epoch)
     scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=h.lr_decay, last_epoch=last_epoch)
@@ -184,8 +181,12 @@ def train(rank, a, h):
                                              else mpd).state_dict(),
                                      'msd': (msd.module if h.num_gpus > 1
                                              else msd).state_dict(),
-                                     'optim_g': optim_g.state_dict(), 'optim_d': optim_d.state_dict(), 'steps': steps,
-                                     'epoch': epoch})
+                                     'optim_g': optim_g.state_dict(),
+                                     'optim_d': optim_d.state_dict(),
+                                     'steps': steps,
+                                     'epoch': epoch,
+                                     'scheduler_g': scheduler_g.state_dict(),
+                                     'scheduler_d': scheduler_d.state_dict()})
 
                 # Validation
                 if steps % a.validation_interval == 0: # and steps != 0:
@@ -208,10 +209,11 @@ def train(rank, a, h):
                                     {f"audio/{j}_gt": wandb.Audio(y[0].detach().cpu().numpy(),
                                                                   caption=f"audio/{j}_gt",
                                                                   sample_rate=h.sampling_rate)})
-                            wandb.log(
-                                {f"audio/{j}_generated": wandb.Audio(y_g_hat[0].squeeze(0).detach().cpu().numpy(),
-                                                                     caption=f"audio/{j}_generated",
-                                                                     sample_rate=h.sampling_rate)})
+                            if steps % a.log_audio_interval == 0:
+                                wandb.log(
+                                    {f"audio/{j}_generated": wandb.Audio(y_g_hat[0].squeeze(0).detach().cpu().numpy(),
+                                                                         caption=f"audio/{j}_generated",
+                                                                         sample_rate=h.sampling_rate)})
 
                         val_err = val_err_tot / (j + 1)
                         wandb.log({"val_loss/mel_error": val_err})
@@ -245,6 +247,7 @@ def main():
     parser.add_argument('--wandb_log_interval', default=5, type=int)
     parser.add_argument('--checkpoint_interval', default=5000, type=int)
     parser.add_argument('--validation_interval', default=1000, type=int)
+    parser.add_argument('--log_audio_interval', default=100000, type=int)
     parser.add_argument('--fine_tuning', default=False, type=bool)
 
     a = parser.parse_args()
