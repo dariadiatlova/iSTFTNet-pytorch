@@ -60,13 +60,13 @@ def main():
     logger.info('Initializing Inference Process..')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--checkpoint_file', required=True)
+    parser.add_argument('--checkpoint_file', required=True, default="data/awesome_checkpoints/g_02900000")
     parser.add_argument('--onnx_inference', default=False, help="if True checkpoint file should be .onnx")
     parser.add_argument('--onnx_provider', default="CPUExecutionProvider",
                         help="https://onnxruntime.ai/docs/execution-providers/")
-    parser.add_argument('--input_wavs_dir', default='test_files')
+    parser.add_argument('--input_wavs_dir', default='data/test_files')
     parser.add_argument('--input_mels_dir', default=None)
-    parser.add_argument('--output_dir', default='generated_files')
+    parser.add_argument('--output_dir', default='data/generated_files')
     parser.add_argument('--config_path', default="config.json")
     parser.add_argument('--compute_mels', default=True, help="if True, input_wavs_dir should be specified")
     args = parser.parse_args()
