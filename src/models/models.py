@@ -6,8 +6,8 @@ from typing import List, Tuple
 from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 
-from src.utils.env import AttrDict
-from src.utils.utils import init_weights, get_padding
+from src.util.env import AttrDict
+from src.util.utils import init_weights, get_padding
 
 LRELU_SLOPE = 0.1
 

@@ -10,7 +10,7 @@ from loguru import logger
 from typing import Optional, Dict, Any
 from torch.nn.utils import weight_norm
 
-from env import AttrDict
+from src.util.env import AttrDict
 
 matplotlib.use("Agg")
 
@@ -58,8 +58,8 @@ def get_padding(kernel_size: int, dilation: int = 1) -> int:
 
 
 def load_checkpoint(filepath: str, device: str) -> Optional[Dict]:
-    assert os.path.isfile(filepath)
     logger.info(f"Loading {filepath}")
+    assert os.path.isfile(filepath)
     checkpoint_dict = torch.load(filepath, map_location=device)
     logger.info("Complete.")
     return checkpoint_dict
