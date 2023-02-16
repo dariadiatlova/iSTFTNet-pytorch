@@ -10,10 +10,10 @@ from loguru import logger
 from scipy.io.wavfile import write
 
 from src.utils.env import AttrDict
-from src.model.stft import TorchSTFT
-from src.model.models import Generator
+from src.models.stft import TorchSTFT
+from src.models.models import Generator
 from src.utils.utils import setup_logger, load_checkpoint, load_config
-from meldataset import get_mel_spectrogram, MAX_WAV_VALUE, load_wav
+from src.datasets.meldataset import get_mel_spectrogram, MAX_WAV_VALUE, load_wav
 
 
 def inference(args: argparse.Namespace, config: AttrDict, device: str) -> None:

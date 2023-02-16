@@ -14,11 +14,11 @@ from torch.distributed import init_process_group
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler, DataLoader
 
-from src.model.stft import TorchSTFT
+from src.models.stft import TorchSTFT
 from src.utils.env import AttrDict, build_env
-from meldataset import MelDataset, get_mel_spectrogram, get_dataset_filelist
+from src.datasets.meldataset import MelDataset, get_mel_spectrogram, get_dataset_filelist
 from src.utils.utils import scan_checkpoint, load_checkpoint, save_checkpoint, setup_logger, load_config
-from src.model.models import Generator, MultiPeriodDiscriminator, MultiScaleDiscriminator, feature_loss, generator_loss,\
+from src.models.models import Generator, MultiPeriodDiscriminator, MultiScaleDiscriminator, feature_loss, generator_loss,\
     discriminator_loss
 
 
