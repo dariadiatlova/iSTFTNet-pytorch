@@ -30,9 +30,13 @@
 
     "num_workers": 4,
 
+    "wandb": {"project": "iSTFT Vocoder",
+    "log_every_n_steps": 1},
+
     "dist_config": {
-        "dist_backend": "nccl",
-        "dist_url": "tcp://localhost:54321",
+        "dist_backend": "gloo",
+        "dist_addr": "localhost",
+        "dist_port": "56789",
         "world_size": 1
     }
 }

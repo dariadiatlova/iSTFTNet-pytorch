@@ -12,7 +12,7 @@ from meldataset import MAX_WAV_VALUE
 from models import Generator
 from stft import TorchSTFT
 
-h = None
+config = None
 device = None
 
 
@@ -33,8 +33,8 @@ def scan_checkpoint(cp_dir, prefix):
 
 
 def inference(a):
-    generator = Generator(h).to(device)
-    stft = TorchSTFT(filter_length=h.gen_istft_n_fft, hop_length=h.gen_istft_hop_size, win_length=h.gen_istft_n_fft).to(device)
+    generator = Generator(config).to(device)
+    stft = TorchSTFT(filter_length=config.gen_istft_n_fft, hop_length=config.gen_istft_hop_size, win_length=config.gen_istft_n_fft).to(device)
     state_dict_g = load_checkpoint(a.checkpoint_file, device)
     generator.load_state_dict(state_dict_g['generator'])
 
@@ -55,7 +55,7 @@ def inference(a):
             audio = audio.cpu().numpy().astype('int16')
 
             output_file = os.path.join(a.output_dir, os.path.splitext(filname)[0] + '_generated_e2e.wav')
-            write(output_file, h.sampling_rate, audio)
+            write(output_file, config.sampling_rate, audio)
             print(output_file)
 
 
@@ -72,7 +72,7 @@ def main():
     with open(config_file) as f:
         data = f.read()
 
-    global h
+    global config
     json_config = json.loads(data)
     h = AttrDict(json_config)
 
