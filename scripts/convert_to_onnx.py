@@ -2,9 +2,9 @@ import torch
 import argparse
 import warnings
 
-from src.utils.env import AttrDict
+from src.util.env import AttrDict
 from src.models.models import Generator
-from src.utils.utils import load_checkpoint, load_config
+from src.util.utils import load_checkpoint, load_config
 
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
