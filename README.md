@@ -19,6 +19,29 @@ This repository is based on the [opensource implementation](https://github.com/r
       pip install torch torchvision torchaudio —extra-index-url https://download.pytorch.org/whl/cu116
       pip install -r requirements.txt
       
+      
+## Inference 
+
+### Download checkpoints
+
+      bash download_checkpoints.sh
+      
+After downloading checkopints, your file structurw should look like:
+
+      ├── data                                                                                                                                                                                 
+      │   ├── awesome_checkpoints                                                                                                                                                              
+      │   │   ├── do_02900000                                                                                                                                                                  
+      │   │   ├── g_02900000                                                                                                                                                                   
+      │   │   └── g_02900000.onnx                                                                                                                                                              
+      │   ├── deep_voices_mel                                                                                                                                                                  
+      │   │   ├── andrey_preispolnilsya.npy                                                                                                                                                    
+      │   │   ├── egor_dora.npy
+      │   │   └── kirill_lunch.npy
+      │   └── deep_voices_wav
+      │       ├── andrey_preispolnilsya.wav
+      │       ├── egor_dora.wav
+      │       └── kirill_lunch.wav
+      
 
 ## Citations :
 ```
