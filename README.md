@@ -6,6 +6,8 @@ This repository is based on the [opensource implementation](https://github.com/r
 - added `Docerfile` for faster env set up;
 - updated the code with several scripts to `compute mel-spectrograms` and `convert the model to .onnx`.
 
+Note: according to our tests, `iSTFT Net` shows even higher synthesis quality than [`HiFi GAN`](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/SpeechSynthesis/HiFiGAN), with a 2x acceleration of RTF.
+
 
 ## Table of Contents  
 - [Setup env](#setup-env)  
@@ -52,7 +54,17 @@ Your file structure should look like:
       │       ├── egor_dora.wav
       │       └── kirill_lunch.wav
       
-      
+ 
+ Note: we trained the model with batch size 16 using 4 a100 GPUs for 2.9M steps.
+ 
+ | Filename  | Description |
+| ------------- | ------------- |
+|do_02900000 | Discriminator checkpoint.|
+|g_02900000 | Generator checkpoint. |
+| g_02900000.onnx | `.onnx` model. |
+|deep_voices_mel | Directory with 3 mel-spectrograms of test-audios.|
+|deep_voices_wav | Directory with 3 original audios – voices of our team, this audios were not seen during the training.|
+
  ### Inference 
  
 To run inference with downloaded test-files:
@@ -60,18 +72,18 @@ To run inference with downloaded test-files:
        python -m src.inference
        
        
-To run inference with your own files specify parameters:
+To run inference with your own files or parameters:
 
 | Parameter  | Description |
 | ------------- | ------------- |
 | input_wavs_dir | Directory with your wav files to synthesize.  |
 | input_mels_dir  | Directory with pre-computed mel-spectrograms to synthesize mel. Note that mel-spectrograms should be computed with [compute_mels_from_audio.py](iSTFTNet-pytorch/scripts/compute_mels_from_audio.py) script.|
 |compute_mels| Pass `--no-compute_mels` if you precomputed mels, if not specified mels will be computed from the audios in input_wavs_dir.|
-|onnx_inference| If specified, checkpoint file should be `.onnx` file|
+|onnx_inference| If specified, checkpoint file should be `.onnx` file.|
 |onnx_provider| Used if onnx_inference is specified, default provider is `CPUExecutionProvider` for `CPU` inference.
-|checkpoint_file| Path to the generator checkpoint or `.onnx` model|
-|output_dir | Path where generated wavs will be saved, default is `src/data/generated_files`|
-| config_path | Path to [`config.json`](iSTFTNet-pytorch/src/config.json)|
+|checkpoint_file| Path to the generator checkpoint or `.onnx` model.|
+|output_dir | Path where generated wavs will be saved, default is `src/data/generated_files`.|
+| config_path | Path to [`config.json`](iSTFTNet-pytorch/src/config.json).|
      
 
 ## Train 
@@ -85,12 +97,12 @@ Parameters for training and finetuning the model:
 
 | Parameter  | Description |
 | ------------- | ------------- |
-| input_training_file | Path to the `train.txt`  |
-| input_validation_file | Path to the `val.txt`  |
-|config_path | Path the [`config.json`](iSTFTNet-pytorch/src/config.json)|
+| input_training_file | Path to the `train.txt`.|
+| input_validation_file | Path to the `val.txt`.  |
+|config_path | Path the [`config.json`](iSTFTNet-pytorch/src/config.json).|
 |input_mels_dir | Path to the directory with mel-spectrograms, specify if you would like to train / finetune the model on Acoustic Model outputs. |
 | fine_tuning | If specified will look for mel-spectrograms in `input_mels_dir`.|
-|checkpoint_path | Path to the directory with checkpoints, if you would like to finetune the model on your data based on our checkpoints: `/src/data/awesome_checkpoints` |
+|checkpoint_path | Path to the directory with checkpoints, if you would like to finetune the model on your data based on our checkpoints: `/src/data/awesome_checkpoints`. |
 |training_epochs | `N` epochs to train the model. |
 |wandb_log_interval | `N` steps through which log training loss to wandb. |
 | checkpoint_interval |`N` steps through which save checkpoint. |
@@ -109,9 +121,9 @@ Find the instructions to infer `.onnx` model in the `Inference` block. To conver
       
 | Parameter  | Description |
 | ------------- | ------------- |
-| checkpoint_file | Path to the `generator` checkpoint   |
-| config_path | Path to the [`config.json`](iSTFTNet-pytorch/src/config.json)  |
-| converted_model_path | Path where converted model will be saved, default is `/src/checkpoints` |
+| checkpoint_file | Path to the `generator` checkpoint.   |
+| config_path | Path to the [`config.json`](iSTFTNet-pytorch/src/config.json).  |
+| converted_model_path | Path where converted model will be saved, default is `/src/checkpoints`. |
 
 ## Citations
 ```
