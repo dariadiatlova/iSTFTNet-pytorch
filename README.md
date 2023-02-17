@@ -26,7 +26,7 @@ This repository is based on the [opensource implementation](https://github.com/r
 
       bash download_checkpoints.sh
       
-After downloading checkopints, your file structurw should look like:
+Your file structure should look like:
 
       ├── data                                                                                                                                                                                 
       │   ├── awesome_checkpoints                                                                                                                                                              
@@ -41,6 +41,25 @@ After downloading checkopints, your file structurw should look like:
       │       ├── andrey_preispolnilsya.wav
       │       ├── egor_dora.wav
       │       └── kirill_lunch.wav
+      
+      
+ ### Running inference 
+ 
+To run inference with downloaded test-files:
+
+       python -m src.inference
+       
+       
+To run inference with your own files specify parameters:
+
+| Parameter  | Description |
+| ------------- | ------------- |
+| input_wavs_dir | Directory with your wav files to synthesize.  |
+| input_mels_dir  | Directory with pre-computed mel-spectrograms to synthesize mel. Note that mel-spectrograms should be computed with [compute_mels_from_audio.py](iSTFTNet-pytorch/scripts/compute_mels_from_audio.py) script.|
+|compute_mels| Pass `--no-compute_mels` if you precomputed mels, if not specified mels will be computed from the audios in input_wavs_dir.|
+|onnx_inference| If specified, checkpoint file should be `.onnx` file|
+|onnx_provider| Used if onnx_inference is specified, default provider is `CPUExecutionProvider` for `CPU` inference.
+|checkpoint_file| Path to the generator checkpoint or `.onnx` model|
       
 
 ## Citations :
