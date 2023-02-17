@@ -3,7 +3,16 @@ This repository is based on the [opensource implementation](https://github.com/r
 - we changed the `logging` – added `loguru` & `wandb`; 
 - added `Docerfile` for faster env set up;
 - updated the code with several scripts to `compute mel-spectrograms` and `convert the model to .onnx`;
-- we share the weights of the model we trained on robust internal dataset consists of Russian speech recorded in different acoustic conditions.
+- we share the weights of the model we trained on robust internal dataset consists of Russian speech recorded in different acoustic conditions with sample rate 22050 Hz.
+
+
+## Table of Contents  
+- [Setup env](#setup-env)  
+- [Inference](#inference) 
+- [Train](#train)
+- [ONNX](#onnx)
+- [Citations](#citations)
+- [References](#references)
 
 ## Setup env
 
@@ -43,7 +52,7 @@ Your file structure should look like:
       │       └── kirill_lunch.wav
       
       
- ### Running inference 
+ ### Inference 
  
 To run inference with downloaded test-files:
 
@@ -60,16 +69,50 @@ To run inference with your own files specify parameters:
 |onnx_inference| If specified, checkpoint file should be `.onnx` file|
 |onnx_provider| Used if onnx_inference is specified, default provider is `CPUExecutionProvider` for `CPU` inference.
 |checkpoint_file| Path to the generator checkpoint or `.onnx` model|
+|output_dir | Path where generated wavs will be saved, default is `src/data/generated_files`|
+| config_path | Path to [`config.json`](iSTFTNet-pytorch/src/config.json)|
      
 
 ## Train 
 
 To train the model:
-1. Login from CLI to Wanb account: `wandb login`.
-2. Create training manifects wiht [create_manifests.py](iSTFTNet-pytorch/scripts/create_manifests.py) script.
+1. Login from CLI to Wanb account: `wandb login`
+2. Create `train.txt` and `val.txt` with [create_manifests.py](iSTFTNet-pytorch/scripts/create_manifests.py).
+3. Run `src.train`
+
+Parameters for training and finetuning the model:
+
+| Parameter  | Description |
+| ------------- | ------------- |
+| input_training_file | Path to the `train.txt`  |
+| input_validation_file | Path to the `val.txt`  |
+|config_path | Path the [`config.json`](iSTFTNet-pytorch/src/config.json)|
+|input_mels_dir | Path to the directory with mel-spectrograms, specify if you would like to train / finetune the model on Acoustic Model outputs. |
+| fine_tuning | If specified will look for mel-spectrograms in `input_mels_dir`.|
+|checkpoint_path | Path to the directory with checkpoints, if you would like to finetune the model on your data based on our checkpoints: `/src/data/awesome_checkpoints` |
+|training_epochs | `N` epochs to train the model. |
+|wandb_log_interval | `N` steps through which log training loss to wandb. |
+| checkpoint_interval |`N` steps through which save checkpoint. |
+| log_audio_interval | `N` steps through which log generated audios from validation dataset to wandb. |
+| validation_interval | `N` steps through which run validation and log validation loss to wandb. |
+
+Note: for correct inference and finetuning from our checkpoints, parameters: `num_mels`, `n_fft`, `hop_size`, `win_size`, `sampling_rate`, `fmin` and `fmax` should not be changed. 
 
 
-## Citations :
+## ONNX
+
+Find the instructions to infer `.onnx` model in the `Inference` block. To convert trained model to `.onnx`:
+      
+      python -m srcipts.convert_to_onnx
+      
+      
+| Parameter  | Description |
+| ------------- | ------------- |
+| checkpoint_file | Path to the `generator` checkpoint   |
+| config_path | Path to the [`config.json`](iSTFTNet-pytorch/src/config.json)  |
+| converted_model_path | Path where converted model will be saved, default is `/src/checkpoints` |
+
+## Citations
 ```
 @inproceedings{kaneko2022istftnet,
 title={{iSTFTNet}: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse Short-Time Fourier Transform},
@@ -79,5 +122,5 @@ year={2022},
 }
 ```
 
-## References:
+## References
 * https://github.com/rishikksh20/iSTFTNet-pytorch
