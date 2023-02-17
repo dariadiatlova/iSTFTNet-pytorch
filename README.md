@@ -60,7 +60,14 @@ To run inference with your own files specify parameters:
 |onnx_inference| If specified, checkpoint file should be `.onnx` file|
 |onnx_provider| Used if onnx_inference is specified, default provider is `CPUExecutionProvider` for `CPU` inference.
 |checkpoint_file| Path to the generator checkpoint or `.onnx` model|
-      
+     
+
+## Train 
+
+To train the model:
+1. Login from CLI to Wanb account: `wandb login`.
+2. Create training manifects wiht [create_manifests.py](iSTFTNet-pytorch/scripts/create_manifests.py) script.
+
 
 ## Citations :
 ```
