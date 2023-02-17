@@ -1,7 +1,7 @@
 # iSTFTNet : Fast and Lightweight Mel-spectrogram Vocoder Incorporating Inverse Short-time Fourier Transform
 This repository is based on the [opensource implementation](https://github.com/rishikksh20/iSTFTNet-pytorch) of [iSTFTNet](https://arxiv.org/abs/2203.02395) (model `C8C8I`). Our contribution to the repository:
 
-- shared the weights of the model we trained on robust internal dataset consists of `Russian speech` recorded in different acoustic conditions with sample rate `22050 Hz`.
+- shared the weights of the model we trained on robust internal dataset consists of `Russian speech` recorded in different acoustic conditions with sample rate `22050 Hz`;
 - added `loguru` & `wandb`; 
 - added `Docerfile` for faster env set up;
 - updated the code with several scripts to `compute mel-spectrograms` and `convert the model to .onnx`.
