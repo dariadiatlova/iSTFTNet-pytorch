@@ -216,7 +216,7 @@ def main():
     parser.add_argument('--config_path', default='config.json')
     parser.add_argument('--input_mels_dir', default='ft_dataset')
     parser.add_argument('--fine_tuning', default=False, type=bool)
-    parser.add_argument('--checkpoint_path', default='checkpoints')
+    parser.add_argument('--checkpoint_path', default='/src/checkpoints')
     parser.add_argument('--training_epochs', default=3900, type=int)
     parser.add_argument('--wandb_log_interval', default=50, type=int, help="Once per n steps")
     parser.add_argument('--checkpoint_interval', default=5000, type=int, help="Once per n steps")

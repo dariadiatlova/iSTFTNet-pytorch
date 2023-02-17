@@ -40,7 +40,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint_file', required=True)
     parser.add_argument('--config_path', default="config.json")
-    parser.add_argument('--converted_model_path', default="istft_vocoder.onnx")
+    parser.add_argument('--converted_model_path', default="src/checkpoints/istft_vocoder.onnx")
     args = parser.parse_args()
     config = load_config(args.config_path)
 
