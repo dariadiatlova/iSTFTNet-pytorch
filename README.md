@@ -6,7 +6,7 @@ This repository is based on the [opensource implementation](https://github.com/r
 - added `Docerfile` for faster env set up;
 - updated the code with several scripts to `compute mel-spectrograms` and `convert the model to .onnx`.
 
-Note: according to our tests, `iSTFT Net` shows even higher synthesis quality than [`HiFi GAN`](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/SpeechSynthesis/HiFiGAN), with a 2x acceleration of RTF.
+Note: according to our tests `iSTFT Net` shows even higher synthesis quality than [`HiFi GAN`](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/SpeechSynthesis/HiFiGAN), with a 2x acceleration of RTF.
 
 
 ## Table of Contents  
