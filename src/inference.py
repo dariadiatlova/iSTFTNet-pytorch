@@ -63,7 +63,7 @@ def main():
     logger.info('Initializing Inference Process..')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--checkpoint_file', default="src/data/awesome_checkpoints/g_02900000")
+    parser.add_argument('--checkpoint_file', default="src/data/awesome_checkpoints/g_00975000")
     parser.add_argument('--onnx_inference', default=False, help="if True checkpoint file should be .onnx")
     parser.add_argument('--onnx_provider', default="CPUExecutionProvider",
                         help="https://onnxruntime.ai/docs/execution-providers/")
