@@ -1,16 +1,16 @@
-import torch
 import argparse
 import warnings
 
-from src.util.env import AttrDict
-from src.models.models import Generator
-from src.util.utils import load_checkpoint, load_config
+import torch
 
+from src.models.modules import Generator
+from src.util.env import AttrDict
+from src.util.utils import load_checkpoint, load_config
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
 
 
-def convert(args: argparse.Namespace, config: AttrDict, device: str) -> None:
+def convert(args: argparse.Namespace, config: AttrDict, device: str):
     generator = Generator(config).to(device)
     state_dict_g = load_checkpoint(args.checkpoint_file, device)
     generator.load_state_dict(state_dict_g['generator'])

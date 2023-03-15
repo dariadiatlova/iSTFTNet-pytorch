@@ -1,14 +1,26 @@
-FROM python:3.8
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
+
+ENV NV_CUDNN_VERSION 8.6.0.163
+ENV NV_CUDNN_PACKAGE_NAME "libcudnn8"
+
+ENV NV_CUDNN_PACKAGE "$NV_CUDNN_PACKAGE_NAME=$NV_CUDNN_VERSION-1+cuda11.8"
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y &&\
+    apt-get install -y --no-install-recommends gcc libsndfile1 vim unzip \
+    ${NV_CUDNN_PACKAGE} \
+    && apt-mark hold ${NV_CUDNN_PACKAGE_NAME} \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update -y \
+    && apt-get install -y python3-pip
+RUN echo 'alias python=python3' >> ~/.bashrc
+RUN echo 'NCCL_SOCKET_IFNAME=lo' >> ~/.bashrc
 
 WORKDIR /app
-COPY . /app
+COPY requirements.txt requirements.txt
 
-RUN apt-get update -y
-RUN apt-get install -y --no-install-recommends build-essential gcc libsndfile1
-RUN apt-get install -y vim
-
-RUN pip install --upgrade pip
-RUN pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
-RUN pip3 install -r requirements.txt
+RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu117 --upgrade
+RUN pip install -r requirements.txt
 
 ENTRYPOINT [ "bash" ]

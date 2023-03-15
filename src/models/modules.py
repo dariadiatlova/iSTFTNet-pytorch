@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
-from typing import List, Tuple
+from typing import Any
 from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 
@@ -101,7 +101,7 @@ class Generator(torch.nn.Module):
         self.conv_post.apply(init_weights)
         self.reflection_pad = torch.nn.ReflectionPad1d((1, 0))
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.conv_pre(x)
         for i in range(self.num_upsamples):
             x = F.leaky_relu(x, LRELU_SLOPE)
@@ -145,11 +145,10 @@ class DiscriminatorP(torch.nn.Module):
         ])
         self.conv_post = norm_f(Conv2d(1024, 1, (3, 1), 1, padding=(1, 0)))
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
         fmap = []
-        # 1d to 2d
         b, c, t = x.shape
-        if t % self.period != 0: # pad first
+        if t % self.period != 0:
             n_pad = self.period - (t % self.period)
             x = F.pad(x, (0, n_pad), "reflect")
             t = t + n_pad
@@ -177,8 +176,7 @@ class MultiPeriodDiscriminator(torch.nn.Module):
             DiscriminatorP(11),
         ])
 
-    def forward(self, y: torch.Tensor, y_hat: torch.Tensor
-                ) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
+    def forward(self, y: torch.Tensor, y_hat: torch.Tensor) -> tuple[list[torch.Tensor], ...]:
         y_d_rs = []
         y_d_gs = []
         fmap_rs = []
@@ -209,7 +207,7 @@ class DiscriminatorS(torch.nn.Module):
         ])
         self.conv_post = norm_f(Conv1d(1024, 1, 3, 1, padding=1))
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
         fmap = []
         for l in self.convs:
             x = l(x)
@@ -232,8 +230,7 @@ class MultiScaleDiscriminator(torch.nn.Module):
         ])
         self.meanpools = nn.ModuleList([AvgPool1d(4, 2, padding=2), AvgPool1d(4, 2, padding=2)])
 
-    def forward(self, y: torch.Tensor, y_hat: torch.Tensor
-                ) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
+    def forward(self, y: torch.Tensor, y_hat: torch.Tensor) -> tuple[list[torch.Tensor], ...]:
         y_d_rs = []
         y_d_gs = []
         fmap_rs = []
@@ -252,17 +249,16 @@ class MultiScaleDiscriminator(torch.nn.Module):
         return y_d_rs, y_d_gs, fmap_rs, fmap_gs
 
 
-def feature_loss(fmap_r: List[torch.Tensor], fmap_g: List[torch.Tensor]) -> float:
+def feature_loss(fmap_r: list[torch.Tensor], fmap_g: list[torch.Tensor]) -> float:
     loss = 0
     for dr, dg in zip(fmap_r, fmap_g):
         for rl, gl in zip(dr, dg):
             loss += torch.mean(torch.abs(rl - gl))
+    return loss
 
-    return loss * 2
 
-
-def discriminator_loss(disc_real_outputs: List[torch.Tensor], disc_generated_outputs: List[torch.Tensor]
-                       ) -> Tuple[float, List[torch.Tensor], List[torch.Tensor]]:
+def discriminator_loss(disc_real_outputs: list[torch.Tensor],
+                       disc_generated_outputs: list[torch.Tensor]) -> tuple[Any, ...]:
     loss = 0
     r_losses = []
     g_losses = []
@@ -276,7 +272,7 @@ def discriminator_loss(disc_real_outputs: List[torch.Tensor], disc_generated_out
     return loss, r_losses, g_losses
 
 
-def generator_loss(disc_outputs: List[torch.Tensor]) -> Tuple[float, List[torch.Tensor]]:
+def generator_loss(disc_outputs: list[torch.Tensor]) -> tuple[float, list[torch.Tensor]]:
     loss = 0
     gen_losses = []
     for dg in disc_outputs:
