@@ -28,11 +28,11 @@ def main(args: argparse.Namespace, config: AttrDict):
         torch.save(x, str(mel_filename))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config_path', help="path to config/config.json")
-    parser.add_argument('--input_wav_dirs', default="/app/data/deep_voices_wav")
-    parser.add_argument('--output_mel_dirs', default="/app/data/deep_mels")
+    parser.add_argument("-c", "--config_path", help="path to config/config.json")
+    parser.add_argument("--input_wav_dirs", default="/app/data/deep_voices_wav")
+    parser.add_argument("--output_mel_dirs", default="/app/data/deep_mels")
     args = parser.parse_args()
     config = load_config(args.config_path)
     main(args, config)

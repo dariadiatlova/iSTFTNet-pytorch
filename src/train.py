@@ -11,29 +11,40 @@ import torch.nn.functional as F
 import wandb
 
 from loguru import logger
-from torch.distributed import init_process_group
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler, DataLoader
 from tqdm import trange
 
 from src.datasets.meldataset import MelDataset, get_mel_spectrogram, get_dataset_filelist
-from src.models.modules import Generator, MultiPeriodDiscriminator, MultiScaleDiscriminator, feature_loss, \
-    generator_loss, discriminator_loss
+from src.models.modules import (
+    Generator,
+    MultiPeriodDiscriminator,
+    MultiScaleDiscriminator,
+    feature_loss,
+    generator_loss,
+    discriminator_loss,
+)
 from src.models.stft import TorchSTFT
 from src.util.env import AttrDict, build_env, configure_env_for_dist_training
 from src.util.utils import scan_checkpoint, load_checkpoint, save_checkpoint, setup_logger, load_config
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 torch.backends.cudnn.benchmark = True
 
 
-def _load_checkpoint(args: argparse.Namespace, device: torch.device, generator: Generator,
-                     mpd: MultiPeriodDiscriminator, msd: MultiScaleDiscriminator,
-                     optim_g: torch.optim.AdamW, optim_d: torch.optim.AdamW):
+def _load_checkpoint(
+    args: argparse.Namespace,
+    device: torch.device,
+    generator: Generator,
+    mpd: MultiPeriodDiscriminator,
+    msd: MultiScaleDiscriminator,
+    optim_g: torch.optim.AdamW,
+    optim_d: torch.optim.AdamW,
+):
     if os.path.isdir(args.checkpoint_path):
-        checkpoint_generator = scan_checkpoint(args.checkpoint_path, 'g_')
-        checkpoint_discriminator = scan_checkpoint(args.checkpoint_path, 'do_')
+        checkpoint_generator = scan_checkpoint(args.checkpoint_path, "g_")
+        checkpoint_discriminator = scan_checkpoint(args.checkpoint_path, "do_")
     else:
         checkpoint_generator, checkpoint_discriminator = None, None
 
@@ -44,43 +55,59 @@ def _load_checkpoint(args: argparse.Namespace, device: torch.device, generator: 
     else:
         state_dict_g = load_checkpoint(checkpoint_generator, device)
         state_dict_do = load_checkpoint(checkpoint_discriminator, device)
-        generator.load_state_dict(state_dict_g['generator'])
-        mpd.load_state_dict(state_dict_do['mpd'])
-        msd.load_state_dict(state_dict_do['msd'])
-        steps = state_dict_do['steps'] + 1
-        last_epoch = state_dict_do['epoch']
+        generator.load_state_dict(state_dict_g["generator"])
+        mpd.load_state_dict(state_dict_do["mpd"])
+        msd.load_state_dict(state_dict_do["msd"])
+        steps = state_dict_do["steps"] + 1
+        last_epoch = state_dict_do["epoch"]
         logger.info(f"Continuing training from epoch: {last_epoch} /n Continuing training from steps: {steps}.")
-        optim_g.load_state_dict(state_dict_do['optim_g'])
-        optim_d.load_state_dict(state_dict_do['optim_d'])
+        optim_g.load_state_dict(state_dict_do["optim_g"])
+        optim_d.load_state_dict(state_dict_do["optim_d"])
 
     return generator, mpd, msd, optim_g, optim_d, steps, last_epoch
 
 
-def _save_checkpoint(args: argparse.Namespace, generator: Generator, config: AttrDict, steps: int,
-                     mpd: MultiPeriodDiscriminator, msd: MultiScaleDiscriminator,
-                     optim_g: torch.optim.AdamW, optim_d: torch.optim.AdamW, epoch: int):
+def _save_checkpoint(
+    args: argparse.Namespace,
+    generator: Generator,
+    config: AttrDict,
+    steps: int,
+    mpd: MultiPeriodDiscriminator,
+    msd: MultiScaleDiscriminator,
+    optim_g: torch.optim.AdamW,
+    optim_d: torch.optim.AdamW,
+    epoch: int,
+):
     checkpoint_path = f"{args.checkpoint_path}/g_{steps:08d}"
-    save_checkpoint(checkpoint_path,
-                    {'generator': (generator.module if config.num_gpus > 1 else generator).state_dict()})
+    save_checkpoint(
+        checkpoint_path, {"generator": (generator.module if config.num_gpus > 1 else generator).state_dict()}
+    )
     checkpoint_path = f"{args.checkpoint_path}/do_{steps:08d}"
-    save_checkpoint(checkpoint_path,
-                    {'mpd': (mpd.module if config.num_gpus > 1 else mpd).state_dict(),
-                     'msd': (msd.module if config.num_gpus > 1 else msd).state_dict(),
-                     'optim_g': optim_g.state_dict(),
-                     'optim_d': optim_d.state_dict(),
-                     'steps': steps,
-                     'epoch': epoch})
+    save_checkpoint(
+        checkpoint_path,
+        {
+            "mpd": (mpd.module if config.num_gpus > 1 else mpd).state_dict(),
+            "msd": (msd.module if config.num_gpus > 1 else msd).state_dict(),
+            "optim_g": optim_g.state_dict(),
+            "optim_d": optim_d.state_dict(),
+            "steps": steps,
+            "epoch": epoch,
+        },
+    )
 
 
 @torch.no_grad()
-def loss_logging(y_mel: torch.Tensor, y_g_hat_mel: torch.Tensor, loss_gen_all: torch.Tensor,
-                 steps: int, start_b: float):
-        mel_error = F.l1_loss(y_mel, y_g_hat_mel).item()
-        wandb.log({"train_loss/gen_total_loss": loss_gen_all})
-        wandb.log({"train_loss/mel_error": mel_error})
+def loss_logging(
+    y_mel: torch.Tensor, y_g_hat_mel: torch.Tensor, loss_gen_all: torch.Tensor, steps: int, start_b: float
+):
+    mel_error = F.l1_loss(y_mel, y_g_hat_mel).item()
+    wandb.log({"train_loss/gen_total_loss": loss_gen_all})
+    wandb.log({"train_loss/mel_error": mel_error})
 
-        logger.info(f"Steps : {steps}, Gen Loss Total : {np.round(loss_gen_all.item(), 3)}, "
-                    f"Mel-Spec. Error : {np.round(mel_error, 3)}, s/b : {time.time() - start_b}")
+    logger.info(
+        f"Steps : {steps}, Gen Loss Total : {np.round(loss_gen_all.item(), 3)}, "
+        f"Mel-Spec. Error : {np.round(mel_error, 3)}, s/b : {time.time() - start_b}"
+    )
 
 
 def validation(generator, validation_loader, device, config, steps, args, stft):
@@ -98,14 +125,22 @@ def validation(generator, validation_loader, device, config, steps, args, stft):
 
             if steps == 0:
                 wandb.log(
-                    {f"audio/{j}_gt": wandb.Audio(y[0].detach().cpu().numpy(),
-                                                  caption=f"audio/{j}_gt",
-                                                  sample_rate=config.sampling_rate)})
+                    {
+                        f"audio/{j}_gt": wandb.Audio(
+                            y[0].detach().cpu().numpy(), caption=f"audio/{j}_gt", sample_rate=config.sampling_rate
+                        )
+                    }
+                )
             if steps % args.log_audio_interval == 0:
                 wandb.log(
-                    {f"audio/{j}_generated": wandb.Audio(y_g_hat[0].squeeze(0).detach().cpu().numpy(),
-                                                         caption=f"audio/{j}_generated",
-                                                         sample_rate=config.sampling_rate)})
+                    {
+                        f"audio/{j}_generated": wandb.Audio(
+                            y_g_hat[0].squeeze(0).detach().cpu().numpy(),
+                            caption=f"audio/{j}_generated",
+                            sample_rate=config.sampling_rate,
+                        )
+                    }
+                )
 
         val_err = val_err_tot / (j + 1)
         wandb.log({"val_loss/mel_error": val_err})
@@ -119,16 +154,20 @@ def train(rank, args: argparse.Namespace, config: AttrDict):
     msd = MultiScaleDiscriminator().to(device)
     stft = TorchSTFT(**config).to(device)
     optim_g = torch.optim.AdamW(generator.parameters(), config.learning_rate, betas=(config.adam_b1, config.adam_b2))
-    optim_d = torch.optim.AdamW(itertools.chain(msd.parameters(), mpd.parameters()),
-                                config.learning_rate, betas=(config.adam_b1, config.adam_b2))
+    optim_d = torch.optim.AdamW(
+        itertools.chain(msd.parameters(), mpd.parameters()),
+        config.learning_rate,
+        betas=(config.adam_b1, config.adam_b2),
+    )
 
     if rank == 0:
         logger.info(generator)
         os.makedirs(args.checkpoint_path, exist_ok=True)
         logger.info(f"checkpoints directory : {args.checkpoint_path}")
 
-    generator, mpd, msd, optim_g, optim_d, steps, last_epoch = _load_checkpoint(args, device, generator,
-                                                                                mpd, msd, optim_g, optim_d)
+    generator, mpd, msd, optim_g, optim_d, steps, last_epoch = _load_checkpoint(
+        args, device, generator, mpd, msd, optim_g, optim_d
+    )
 
     if config.num_gpus > 1:
         configure_env_for_dist_training(config, rank)
@@ -142,13 +181,21 @@ def train(rank, args: argparse.Namespace, config: AttrDict):
     training_filelist, validation_filelist = get_dataset_filelist(args)
     trainset = MelDataset(training_filelist, device=device, **config)
     train_sampler = DistributedSampler(trainset) if config.num_gpus > 1 else None
-    train_loader = DataLoader(trainset, num_workers=config.num_workers, shuffle=False if config.num_gpus > 1 else True,
-                              sampler=train_sampler, batch_size=config.batch_size, pin_memory=True, drop_last=True)
+    train_loader = DataLoader(
+        trainset,
+        num_workers=config.num_workers,
+        shuffle=False if config.num_gpus > 1 else True,
+        sampler=train_sampler,
+        batch_size=config.batch_size,
+        pin_memory=True,
+        drop_last=True,
+    )
 
     if rank == 0:
         validset = MelDataset(validation_filelist, split=False, shuffle=False, **config)
-        validation_loader = DataLoader(validset, num_workers=1, shuffle=False, sampler=None,
-                                       batch_size=1, pin_memory=True, drop_last=True)
+        validation_loader = DataLoader(
+            validset, num_workers=1, shuffle=False, sampler=None, batch_size=1, pin_memory=True, drop_last=True
+        )
         wandb.init(project=config["wandb"]["project"])
 
     generator.train()
@@ -222,9 +269,9 @@ def train(rank, args: argparse.Namespace, config: AttrDict):
 
         scheduler_g.step()
         scheduler_d.step()
-        
+
         if rank == 0:
-            logger.info(f'Time taken for epoch {epoch + 1} is {int(time.time() - start)} sec\n')
+            logger.info(f"Time taken for epoch {epoch + 1} is {int(time.time() - start)} sec\n")
 
 
 def main():
@@ -232,17 +279,17 @@ def main():
     logger.info("Initializing Training Process...")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config_path', help='path to config/config.json')
-    parser.add_argument('--input_training_file', type=str)
-    parser.add_argument('--input_validation_file', type=str)
-    parser.add_argument('--input_mels_dir', default='ft_dataset')
-    parser.add_argument('--fine_tuning', default=False, type=bool)
-    parser.add_argument('--checkpoint_path', default='/app/checkpoints')
-    parser.add_argument('--training_epochs', default=1, type=int)
-    parser.add_argument('--wandb_log_interval', default=1, type=int, help="Once per n steps")
-    parser.add_argument('--checkpoint_interval', default=1, type=int, help="Once per n steps")
-    parser.add_argument('--log_audio_interval', default=1, type=int, help="Once per n steps")
-    parser.add_argument('--validation_interval', default=1, type=int, help="Once per n steps")
+    parser.add_argument("-c", "--config_path", help="path to config/config.json")
+    parser.add_argument("--input_training_file", type=str)
+    parser.add_argument("--input_validation_file", type=str)
+    parser.add_argument("--input_mels_dir", default="ft_dataset")
+    parser.add_argument("--fine_tuning", default=False, type=bool)
+    parser.add_argument("--checkpoint_path", default="/app/checkpoints")
+    parser.add_argument("--training_epochs", default=1, type=int)
+    parser.add_argument("--wandb_log_interval", default=1, type=int, help="Once per n steps")
+    parser.add_argument("--checkpoint_interval", default=1, type=int, help="Once per n steps")
+    parser.add_argument("--log_audio_interval", default=1, type=int, help="Once per n steps")
+    parser.add_argument("--validation_interval", default=1, type=int, help="Once per n steps")
 
     args = parser.parse_args()
     config = load_config(args.config_path)
@@ -256,10 +303,17 @@ def main():
         logger.info(f"Batch size per GPU : {config.batch_size}")
 
     if config.num_gpus > 1:
-        mp.spawn(train, nprocs=config.num_gpus, args=(args, config,))
+        mp.spawn(
+            train,
+            nprocs=config.num_gpus,
+            args=(
+                args,
+                config,
+            ),
+        )
     else:
         train(0, args, config)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

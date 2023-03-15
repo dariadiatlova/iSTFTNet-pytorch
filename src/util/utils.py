@@ -61,7 +61,7 @@ def scan_checkpoint(cp_dir: str, prefix: str) -> Optional[str]:
     """
     Returns the latest checkpoint from the directory.
     """
-    pattern = os.path.join(cp_dir, prefix + '????????')
+    pattern = os.path.join(cp_dir, prefix + "????????")
     cp_list = glob.glob(pattern)
     if len(cp_list) == 0:
         return None

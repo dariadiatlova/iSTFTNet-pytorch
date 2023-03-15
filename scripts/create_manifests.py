@@ -21,8 +21,8 @@ def run(args: argparse.Namespace):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source_wavs_dir', type=str)
-    parser.add_argument('--target_manifests_dir', type=str)
-    parser.add_argument('--val_set_size', type=int, default=256)
+    parser.add_argument("--source_wavs_dir", type=str)
+    parser.add_argument("--target_manifests_dir", type=str)
+    parser.add_argument("--val_set_size", type=int, default=256)
     args = parser.parse_args()
     run(args)

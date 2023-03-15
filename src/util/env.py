@@ -13,7 +13,7 @@ class AttrDict(dict):
 
 
 def build_env(config_path: str, ckpt_path: str):
-    """ Copies config to the checkpoint directory """
+    """Copies config to the checkpoint directory"""
     config_name = Path(config_path).name
     target_path = Path(ckpt_path).joinpath(config_name)
     if config_path != target_path:
@@ -24,5 +24,6 @@ def build_env(config_path: str, ckpt_path: str):
 def configure_env_for_dist_training(config: AttrDict, rank: int):
     os.environ["MASTER_ADDR"] = config.dist_config["dist_addr"]
     os.environ["MASTER_PORT"] = config.dist_config["dist_port"]
-    init_process_group(config.dist_config['dist_backend'], rank=rank,
-                       world_size=config.dist_config['world_size'] * config.num_gpus)
+    init_process_group(
+        config.dist_config["dist_backend"], rank=rank, world_size=config.dist_config["world_size"] * config.num_gpus
+    )
