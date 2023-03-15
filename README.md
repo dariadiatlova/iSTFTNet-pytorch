@@ -26,9 +26,7 @@ Note: according to our tests `iSTFT Net` shows even higher synthesis quality tha
       
 ### Conda 
 
-      conda create —name istft-vocoder python=3.9
-      # change the link if you have different version of cuda / no cuda
-      pip install torch torchvision torchaudio —extra-index-url https://download.pytorch.org/whl/cu116
+      conda create —name istft-vocoder python=3.10
       pip install -r requirements.txt
       
       
@@ -42,26 +40,26 @@ Your file structure should look like:
 
       ├── data                                                                                                                                                                                 
       │   ├── awesome_checkpoints                                                                                                                                                              
-      │   │   ├── do_02900000                                                                                                                                                                  
-      │   │   ├── g_02900000                                                                                                                                                                   
-      │   │   └── g_02900000.onnx                                                                                                                                                              
+      │   │   ├── do_00975000                                                                                                                                                                  
+      │   │   ├── g_00975000                                                                                                                                                                   
+      │   │   └── g_00975000.onnx                                                                                                                                                              
       │   ├── deep_voices_mel                                                                                                                                                                  
-      │   │   ├── andrey_preispolnilsya.npy                                                                                                                                                    
-      │   │   ├── egor_dora.npy
-      │   │   └── kirill_lunch.npy
+      │   │   ├── andrey_preispolnilsya.pt                                                                                                                                                    
+      │   │   ├── egor_dora.pt
+      │   │   └── kirill_lunch.pt
       │   └── deep_voices_wav
       │       ├── andrey_preispolnilsya.wav
       │       ├── egor_dora.wav
       │       └── kirill_lunch.wav
       
  
- Note: we trained the model with batch size 16 using 4 a100 GPUs for 2.9M steps.
+ Note: we trained the model with batch size 16 using 4 a100 GPUs for ~1M steps.
  
  | Filename  | Description |
 | ------------- | ------------- |
-|do_02900000 | Discriminator checkpoint.|
-|g_02900000 | Generator checkpoint. |
-| g_02900000.onnx | `.onnx` model. |
+|do_00975000 | Discriminator checkpoint.|
+|g_00975000 | Generator checkpoint. |
+| g_00975000.onnx | `.onnx` model. |
 |deep_voices_mel | Directory with 3 mel-spectrograms of test-audios.|
 |deep_voices_wav | Directory with 3 original audios – voices of our team, this audios were not seen during the training.|
 
@@ -76,14 +74,14 @@ To run inference with your own files or parameters:
 
 | Parameter  | Description |
 | ------------- | ------------- |
-| input_wavs_dir | Directory with your wav files to synthesize.  |
-| input_mels_dir  | Directory with pre-computed mel-spectrograms to synthesize mel. Note that mel-spectrograms should be computed with [compute_mels_from_audio.py](iSTFTNet-pytorch/scripts/compute_mels_from_audio.py) script.|
+| config_path | Path to [`config.json`](iSTFTNet-pytorch/config/config.json).|
+| input_wavs_dir | Directory with your wav files to synthesize, default is `/app/data/deep_voices_wavs`  |
+| input_mels_dir  | Directory with pre-computed mel-spectrograms to synthesize mel. Note that mel-spectrograms should be computed with [compute_mels_from_audio.py](iSTFTNet-pytorch/scripts/compute_mels_from_audio.py) script, default is `/app/data/deep_voices_mels`.|
 |compute_mels| Pass `--no-compute_mels` if you precomputed mels, if not specified mels will be computed from the audios in input_wavs_dir.|
 |onnx_inference| If specified, checkpoint file should be `.onnx` file.|
 |onnx_provider| Used if onnx_inference is specified, default provider is `CPUExecutionProvider` for `CPU` inference.
 |checkpoint_file| Path to the generator checkpoint or `.onnx` model.|
-|output_dir | Path where generated wavs will be saved, default is `src/data/generated_files`.|
-| config_path | Path to [`config.json`](iSTFTNet-pytorch/src/config.json).|
+|output_dir | Path where generated wavs will be saved, default is `/app/data/generated_files`.|
      
 
 ## Train 
@@ -99,10 +97,10 @@ Parameters for training and finetuning the model:
 | ------------- | ------------- |
 | input_training_file | Path to the `train.txt`.|
 | input_validation_file | Path to the `val.txt`.  |
-|config_path | Path the [`config.json`](iSTFTNet-pytorch/src/config.json).|
+|config_path | Path the [`config.json`](iSTFTNet-pytorch/config/config.json).|
 |input_mels_dir | Path to the directory with mel-spectrograms, specify if you would like to train / finetune the model on Acoustic Model outputs. |
 | fine_tuning | If specified will look for mel-spectrograms in `input_mels_dir`.|
-|checkpoint_path | Path to the directory with checkpoints, if you would like to finetune the model on your data based on our checkpoints: `/src/data/awesome_checkpoints`. |
+|checkpoint_path | Path to the directory with checkpoints, if you would like to finetune the model on your data based on our checkpoints: `/app/new_checkpoints`. |
 |training_epochs | `N` epochs to train the model. |
 |wandb_log_interval | `N` steps through which log training loss to wandb. |
 | checkpoint_interval |`N` steps through which save checkpoint. |
@@ -122,8 +120,8 @@ Find the instructions to infer `.onnx` model in the `Inference` block. To conver
 | Parameter  | Description |
 | ------------- | ------------- |
 | checkpoint_file | Path to the `generator` checkpoint.   |
-| config_path | Path to the [`config.json`](iSTFTNet-pytorch/src/config.json).  |
-| converted_model_path | Path where converted model will be saved, default is `/src/checkpoints`. |
+| config_path | Path to the [`config.json`](iSTFTNet-pytorch/config/config.json).  |
+| converted_model_path | Path where converted model will be saved, default is `/app/istft_vocoder.onnx`. |
 
 ## Citations
 ```
