@@ -25,17 +25,10 @@ bash run_docker.sh
 ```     
       
 ### Conda 
-<<<<<<< HEAD
-
-      conda create —name istft-vocoder python=3.10
-      pip install -r requirements.txt
-      
-=======
 ```shell
 conda create —name istft-vocoder python=3.10
 pip install -r requirements.txt
 ````       
->>>>>>> 0e6f200 (last comments changed)
       
 ## Inference 
 
@@ -45,23 +38,7 @@ pip install -r requirements.txt
 bash download_checkpoints.sh
 ```   
 Your file structure should look like:
-<<<<<<< HEAD
-
-      ├── data                                                                                                                                                                                 
-      │   ├── awesome_checkpoints                                                                                                                                                              
-      │   │   ├── do_00975000                                                                                                                                                                  
-      │   │   ├── g_00975000                                                                                                                                                                   
-      │   │   └── g_00975000.onnx                                                                                                                                                              
-      │   ├── deep_voices_mel                                                                                                                                                                  
-      │   │   ├── andrey_preispolnilsya.pt                                                                                                                                                    
-      │   │   ├── egor_dora.pt
-      │   │   └── kirill_lunch.pt
-      │   └── deep_voices_wav
-      │       ├── andrey_preispolnilsya.wav
-      │       ├── egor_dora.wav
-      │       └── kirill_lunch.wav
       
-=======
 ```shell
 ├── data                                                                                                                                                                                 
 │   ├── awesome_checkpoints                                                                                                                                                              
@@ -77,11 +54,10 @@ Your file structure should look like:
 │       ├── egor_dora.wav
 │       └── kirill_lunch.wav
 ```      
->>>>>>> 0e6f200 (last comments changed)
  
- Note: we trained the model with batch size 16 using 4 a100 GPUs for ~1M steps.
+Note: we trained the model with batch size 16 using 4 a100 GPUs for ~1M steps.
  
- | Filename  | Description |
+| Filename  | Description |
 | ------------- | ------------- |
 |do_00975000 | Discriminator checkpoint.|
 |g_00975000 | Generator checkpoint. |
