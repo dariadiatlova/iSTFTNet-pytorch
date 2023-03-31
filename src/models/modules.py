@@ -23,30 +23,11 @@ class ResBlock1(torch.nn.Module):
                         channels,
                         kernel_size,
                         1,
-                        dilation=dilation[0],
-                        padding=get_padding(kernel_size, dilation[0]),
+                        dilation=d,
+                        padding=get_padding(kernel_size, d),
                     )
-                ),
-                weight_norm(
-                    Conv1d(
-                        channels,
-                        channels,
-                        kernel_size,
-                        1,
-                        dilation=dilation[1],
-                        padding=get_padding(kernel_size, dilation[1]),
-                    )
-                ),
-                weight_norm(
-                    Conv1d(
-                        channels,
-                        channels,
-                        kernel_size,
-                        1,
-                        dilation=dilation[2],
-                        padding=get_padding(kernel_size, dilation[2]),
-                    )
-                ),
+                )
+                for d in dilation
             ]
         )
         self.convs1.apply(init_weights)
@@ -54,14 +35,16 @@ class ResBlock1(torch.nn.Module):
         self.convs2 = nn.ModuleList(
             [
                 weight_norm(
-                    Conv1d(channels, channels, kernel_size, 1, dilation=1, padding=get_padding(kernel_size, 1))
-                ),
-                weight_norm(
-                    Conv1d(channels, channels, kernel_size, 1, dilation=1, padding=get_padding(kernel_size, 1))
-                ),
-                weight_norm(
-                    Conv1d(channels, channels, kernel_size, 1, dilation=1, padding=get_padding(kernel_size, 1))
-                ),
+                    Conv1d(
+                        channels,
+                        channels,
+                        kernel_size,
+                        1,
+                        dilation=1,
+                        padding=get_padding(kernel_size, 1),
+                    )
+                )
+                for i in range(3)
             ]
         )
         self.convs2.apply(init_weights)
@@ -93,20 +76,11 @@ class ResBlock2(torch.nn.Module):
                         channels,
                         kernel_size,
                         1,
-                        dilation=dilation[0],
-                        padding=get_padding(kernel_size, dilation[0]),
+                        dilation=d,
+                        padding=get_padding(kernel_size, d),
                     )
-                ),
-                weight_norm(
-                    Conv1d(
-                        channels,
-                        channels,
-                        kernel_size,
-                        1,
-                        dilation=dilation[1],
-                        padding=get_padding(kernel_size, dilation[1]),
-                    )
-                ),
+                )
+                for d in dilation
             ]
         )
         self.convs.apply(init_weights)
@@ -162,9 +136,8 @@ class Generator(torch.nn.Module):
         for i in range(self.num_upsamples):
             x = F.leaky_relu(x, LRELU_SLOPE)
             x = self.ups[i](x)
-            xs = None
-            for j in range(self.num_kernels):
-                if xs is None:
+            for n, j in enumerate(range(self.num_kernels)):
+                if n == 0:
                     xs = self.resblocks[i * self.num_kernels + j](x)
                 else:
                     xs += self.resblocks[i * self.num_kernels + j](x)
@@ -224,17 +197,9 @@ class DiscriminatorP(torch.nn.Module):
 
 
 class MultiPeriodDiscriminator(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, periods):
         super(MultiPeriodDiscriminator, self).__init__()
-        self.discriminators = nn.ModuleList(
-            [
-                DiscriminatorP(2),
-                DiscriminatorP(3),
-                DiscriminatorP(5),
-                DiscriminatorP(7),
-                DiscriminatorP(11),
-            ]
-        )
+        self.discriminators = nn.ModuleList([DiscriminatorP(p) for p in periods])
 
     def forward(self, y: torch.Tensor, y_hat: torch.Tensor) -> tuple[list[torch.Tensor], ...]:
         y_d_rs = []

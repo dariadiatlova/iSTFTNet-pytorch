@@ -9,14 +9,10 @@ def run(args: argparse.Namespace):
     filenames = glob.glob(f"{args.source_wavs_dir}/*.wav")
     np.random.shuffle(filenames)
     for i, file in enumerate(filenames):
-        if i < args.val_set_size:
-            with open(Path(args.target_manifests_dir).joinpath("val.txt"), "a") as f:
-                f.write(str(Path(args.source_wavs_dir).joinpath(file)))
-                f.write("\n")
-        else:
-            with open(Path(args.target_manifests_dir).joinpath("train.txt"), "a") as f:
-                f.write(str(Path(args.source_wavs_dir).joinpath(file)))
-                f.write("\n")
+        output_filename = "val.txt" if i < args.val_set_size else "train.txt"
+        with open(Path(args.target_manifests_dir).joinpath(output_filename), "a") as f:
+            f.write(str(Path(args.source_wavs_dir).joinpath(file)))
+            f.write("\n")
 
 
 if __name__ == "__main__":

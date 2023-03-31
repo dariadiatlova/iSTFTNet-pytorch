@@ -15,7 +15,8 @@ from src.util.env import AttrDict
 from src.util.utils import load_config
 
 
-def main(args: argparse.Namespace, config: AttrDict):
+def main(args: argparse.Namespace):
+    config = load_config(args.config_path)
     os.makedirs(args.output_mel_dirs, exist_ok=True)
     stft = TorchSTFT(**config)
     filelist = glob.glob(f"{args.input_wav_dirs}/*.wav")
@@ -34,5 +35,4 @@ if __name__ == "__main__":
     parser.add_argument("--input_wav_dirs", default="/app/data/deep_voices_wav")
     parser.add_argument("--output_mel_dirs", default="/app/data/deep_mels")
     args = parser.parse_args()
-    config = load_config(args.config_path)
-    main(args, config)
+    main(args)

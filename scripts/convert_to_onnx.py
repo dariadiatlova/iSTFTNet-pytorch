@@ -36,8 +36,8 @@ def convert(args: argparse.Namespace, config: AttrDict, device: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_file", required=True)
-    parser.add_argument("--config_path", default="src/config.json")
-    parser.add_argument("--converted_model_path", default="src/checkpoints/istft_vocoder.onnx")
+    parser.add_argument("--config_path", default="/app/config/config.json")
+    parser.add_argument("--converted_model_path", default="/app/istft_vocoder.onnx")
     args = parser.parse_args()
     config = load_config(args.config_path)
 

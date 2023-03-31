@@ -146,11 +146,15 @@ def validation(generator, validation_loader, device, config, steps, args, stft):
         wandb.log({"val_loss/mel_error": val_err})
 
 
-def train(rank, args: argparse.Namespace, config: AttrDict):
-    torch.cuda.manual_seed(config.seed)
-    device = torch.device(f"cuda:{rank}")
+def _log_checkpoint_info(generator, args):
+    logger.info(generator)
+    os.makedirs(args.checkpoint_path, exist_ok=True)
+    logger.info(f"checkpoints directory : {args.checkpoint_path}")
+
+
+def _init_models(config, device):
     generator = Generator(config).to(device)
-    mpd = MultiPeriodDiscriminator().to(device)
+    mpd = MultiPeriodDiscriminator(config.discriminator_periods).to(device)
     msd = MultiScaleDiscriminator().to(device)
     stft = TorchSTFT(**config).to(device)
     optim_g = torch.optim.AdamW(generator.parameters(), config.learning_rate, betas=(config.adam_b1, config.adam_b2))
@@ -159,117 +163,129 @@ def train(rank, args: argparse.Namespace, config: AttrDict):
         config.learning_rate,
         betas=(config.adam_b1, config.adam_b2),
     )
+    return generator, mpd, msd, stft, optim_g, optim_d
 
-    if rank == 0:
-        logger.info(generator)
-        os.makedirs(args.checkpoint_path, exist_ok=True)
-        logger.info(f"checkpoints directory : {args.checkpoint_path}")
 
-    generator, mpd, msd, optim_g, optim_d, steps, last_epoch = _load_checkpoint(
-        args, device, generator, mpd, msd, optim_g, optim_d
-    )
+def distributed_cover(generator, mpd, msd, device, rank):
+    generator = DistributedDataParallel(generator, device_ids=[rank]).to(device)
+    mpd = DistributedDataParallel(mpd, device_ids=[rank]).to(device)
+    msd = DistributedDataParallel(msd, device_ids=[rank]).to(device)
+    return generator, mpd, msd
 
-    if config.num_gpus > 1:
-        configure_env_for_dist_training(config, rank)
-        generator = DistributedDataParallel(generator, device_ids=[rank]).to(device)
-        mpd = DistributedDataParallel(mpd, device_ids=[rank]).to(device)
-        msd = DistributedDataParallel(msd, device_ids=[rank]).to(device)
 
+def _init_schedulers(optim_g, optim_d, config, last_epoch):
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=config.lr_decay, last_epoch=last_epoch)
     scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=config.lr_decay, last_epoch=last_epoch)
+    return scheduler_g, scheduler_d
 
-    training_filelist, validation_filelist = get_dataset_filelist(args)
-    trainset = MelDataset(training_filelist, device=device, **config)
-    train_sampler = DistributedSampler(trainset) if config.num_gpus > 1 else None
-    train_loader = DataLoader(
-        trainset,
-        num_workers=config.num_workers,
-        shuffle=False if config.num_gpus > 1 else True,
-        sampler=train_sampler,
-        batch_size=config.batch_size,
+
+def _init_dataloader(fileset, num_workers, shuffle, sampler, batch_size):
+    loader = DataLoader(
+        fileset,
+        num_workers=num_workers,
+        shuffle=shuffle,
+        sampler=sampler,
+        batch_size=batch_size,
         pin_memory=True,
         drop_last=True,
     )
+    return loader
 
+
+def _get_dataloaders(args, device, config, rank):
+    training_filelist, validation_filelist = get_dataset_filelist(args)
+    train_set = MelDataset(training_filelist, device=device, **config)
+    train_sampler = DistributedSampler(train_set) if config.num_gpus > 1 else None
+    train_shuffle = False if config.num_gpus > 1 else True
+    train_loader = _init_dataloader(train_set, config.num_workers, train_shuffle, train_sampler, config.batch_size)
     if rank == 0:
-        validset = MelDataset(validation_filelist, split=False, shuffle=False, **config)
-        validation_loader = DataLoader(
-            validset, num_workers=1, shuffle=False, sampler=None, batch_size=1, pin_memory=True, drop_last=True
-        )
+        val_set = MelDataset(validation_filelist, split=False, shuffle=False, **config)
+        validation_loader = _init_dataloader(val_set, 1, False, None, 1)
         wandb.init(project=config["wandb"]["project"])
+    else:
+        validation_loader = None
+    return train_sampler, train_loader, validation_loader
 
+
+def _setup_rank_train(config, rank, args, device):
+    torch.cuda.manual_seed(config.seed)
+    generator, mpd, msd, stft, optim_g, optim_d = _init_models(config, device)
+    if rank == 0:
+        _log_checkpoint_info(generator, args)
+    generator, mpd, msd, optim_g, optim_d, steps, last_epoch = _load_checkpoint(
+        args, device, generator, mpd, msd, optim_g, optim_d
+    )
+    if config.num_gpus > 1:
+        configure_env_for_dist_training(config, rank)
+        generator, mpd, msd = distributed_cover(generator, mpd, msd, device, rank)
     generator.train()
     mpd.train()
     msd.train()
+    return generator, mpd, msd, last_epoch, stft, optim_d, optim_g, steps
+
+
+def _generation_step(batch, device, config, stft, generator):
+    x, y, _, y_mel = batch
+    x = x.to(device)
+    y = y.to(device)
+    y_mel = y_mel.to(device)
+    y = y.unsqueeze(1)
+    spec, phase = generator(x)
+    y_g_hat = stft.inverse(spec, phase)
+    y_g_hat_mel = get_mel_spectrogram(y_g_hat.squeeze(1), **config)
+    return y, y_g_hat, y_mel, y_g_hat_mel
+
+
+def _train_step(y, y_g_hat, y_mel, y_g_hat_mel, config, optim_d, mpd, msd, optim_g):
+    optim_d.zero_grad()
+    y_df_hat_r, y_df_hat_g, _, _ = mpd(y, y_g_hat.detach())
+    loss_disc_f, losses_disc_f_r, losses_disc_f_g = discriminator_loss(y_df_hat_r, y_df_hat_g)
+    y_ds_hat_r, y_ds_hat_g, _, _ = msd(y, y_g_hat.detach())
+    loss_disc_s, losses_disc_s_r, losses_disc_s_g = discriminator_loss(y_ds_hat_r, y_ds_hat_g)
+    loss_disc_all = loss_disc_s + loss_disc_f
+    loss_disc_all.backward()
+    optim_d.step()
+    optim_g.zero_grad()
+    loss_mel = F.l1_loss(y_mel, y_g_hat_mel) * 45
+    y_df_hat_r, y_df_hat_g, fmap_f_r, fmap_f_g = mpd(y, y_g_hat)
+    y_ds_hat_r, y_ds_hat_g, fmap_s_r, fmap_s_g = msd(y, y_g_hat)
+    loss_fm_f = config.fm_scale_factor * feature_loss(fmap_f_r, fmap_f_g)
+    loss_fm_s = config.fm_scale_factor * feature_loss(fmap_s_r, fmap_s_g)
+    loss_gen_f, losses_gen_f = generator_loss(y_df_hat_g)
+    loss_gen_s, losses_gen_s = generator_loss(y_ds_hat_g)
+    loss_gen_all = loss_gen_s + loss_gen_f + loss_fm_s + loss_fm_f + loss_mel
+    return loss_gen_all
+
+
+def train(rank, args: argparse.Namespace, config: AttrDict):
+    device = torch.device(f"cuda:{rank}")
+    generator, mpd, msd, last_epoch, stft, optim_d, optim_g, steps = _setup_rank_train(config, rank, args, device)
+    scheduler_g, scheduler_d = _init_schedulers(optim_g, optim_d, config, last_epoch)
+    train_sampler, train_loader, validation_loader = _get_dataloaders(args, device, config, rank)
     for epoch in trange(max(0, last_epoch), args.training_epochs):
         if rank == 0:
             start = time.time()
             logger.info(f"Epoch: {epoch + 1}")
-
         if config.num_gpus > 1:
             train_sampler.set_epoch(epoch)
-
         for i, batch in enumerate(train_loader):
             if rank == 0:
                 start_b = time.time()
-
-            x, y, _, y_mel = batch
-            x = x.to(device)
-            y = y.to(device)
-            y_mel = y_mel.to(device)
-            y = y.unsqueeze(1)
-            spec, phase = generator(x)
-            y_g_hat = stft.inverse(spec, phase)
-            y_g_hat_mel = get_mel_spectrogram(y_g_hat.squeeze(1), **config)
-            optim_d.zero_grad()
-
-            # MPD
-            y_df_hat_r, y_df_hat_g, _, _ = mpd(y, y_g_hat.detach())
-            loss_disc_f, losses_disc_f_r, losses_disc_f_g = discriminator_loss(y_df_hat_r, y_df_hat_g)
-
-            # MSD
-            y_ds_hat_r, y_ds_hat_g, _, _ = msd(y, y_g_hat.detach())
-            loss_disc_s, losses_disc_s_r, losses_disc_s_g = discriminator_loss(y_ds_hat_r, y_ds_hat_g)
-
-            loss_disc_all = loss_disc_s + loss_disc_f
-            loss_disc_all.backward()
-            optim_d.step()
-
-            # Generator
-            optim_g.zero_grad()
-
-            # L1 Mel-Spectrogram Loss
-            loss_mel = F.l1_loss(y_mel, y_g_hat_mel) * 45
-
-            y_df_hat_r, y_df_hat_g, fmap_f_r, fmap_f_g = mpd(y, y_g_hat)
-            y_ds_hat_r, y_ds_hat_g, fmap_s_r, fmap_s_g = msd(y, y_g_hat)
-            loss_fm_f = config.fm_scale_factor * feature_loss(fmap_f_r, fmap_f_g)
-            loss_fm_s = config.fm_scale_factor * feature_loss(fmap_s_r, fmap_s_g)
-            loss_gen_f, losses_gen_f = generator_loss(y_df_hat_g)
-            loss_gen_s, losses_gen_s = generator_loss(y_ds_hat_g)
-            loss_gen_all = loss_gen_s + loss_gen_f + loss_fm_s + loss_fm_f + loss_mel
-
+            y, y_g_hat, y_mel, y_g_hat_mel = _generation_step(batch, device, config, stft, generator)
+            loss_gen_all = _train_step(y, y_g_hat, y_mel, y_g_hat_mel, config, optim_d, mpd, msd, optim_g)
             loss_gen_all.backward()
             optim_g.step()
-
             if rank == 0:
-                # Wandb & stdout logging
                 if steps % args.wandb_log_interval == 0:
                     loss_logging(y_mel, y_g_hat_mel, loss_gen_all, steps, start_b)
-
-                # checkpointing
                 if steps % args.checkpoint_interval == 0 and steps != 0:
                     _save_checkpoint(args, generator, config, steps, mpd, msd, optim_g, optim_d, epoch)
-
-                # Validation
                 if steps % args.validation_interval == 0:
                     validation(generator, validation_loader, device, config, steps, args, stft)
                     generator.train()
             steps += 1
-
         scheduler_g.step()
         scheduler_d.step()
-
         if rank == 0:
             logger.info(f"Time taken for epoch {epoch + 1} is {int(time.time() - start)} sec\n")
 
@@ -282,9 +298,9 @@ def main():
     parser.add_argument("-c", "--config_path", help="path to config/config.json")
     parser.add_argument("--input_training_file", type=str)
     parser.add_argument("--input_validation_file", type=str)
-    parser.add_argument("--input_mels_dir", default="ft_dataset")
+    parser.add_argument("--input_mels_dir", default="")
     parser.add_argument("--fine_tuning", default=False, type=bool)
-    parser.add_argument("--checkpoint_path", default="/app/checkpoints")
+    parser.add_argument("--checkpoint_path", default="/app/new_checkpoints")
     parser.add_argument("--training_epochs", default=1, type=int)
     parser.add_argument("--wandb_log_interval", default=1, type=int, help="Once per n steps")
     parser.add_argument("--checkpoint_interval", default=1, type=int, help="Once per n steps")

@@ -20,23 +20,32 @@ Note: according to our tests `iSTFT Net` shows even higher synthesis quality tha
 ## Setup env
 
 ### Docker
-
-      bash run_docker.sh
-      
+```shell
+bash run_docker.sh
+```     
       
 ### Conda 
+<<<<<<< HEAD
 
       conda create —name istft-vocoder python=3.10
       pip install -r requirements.txt
       
+=======
+```shell
+conda create —name istft-vocoder python=3.10
+pip install -r requirements.txt
+````       
+>>>>>>> 0e6f200 (last comments changed)
       
 ## Inference 
 
 ### Download checkpoints
 
-      bash download_checkpoints.sh
-      
+```shell
+bash download_checkpoints.sh
+```   
 Your file structure should look like:
+<<<<<<< HEAD
 
       ├── data                                                                                                                                                                                 
       │   ├── awesome_checkpoints                                                                                                                                                              
@@ -52,6 +61,23 @@ Your file structure should look like:
       │       ├── egor_dora.wav
       │       └── kirill_lunch.wav
       
+=======
+```shell
+├── data                                                                                                                                                                                 
+│   ├── awesome_checkpoints                                                                                                                                                              
+│   │   ├── do_02900000                                                                                                                                                                  
+│   │   ├── g_02900000                                                                                                                                                                   
+│   │   └── g_02900000.onnx                                                                                                                                                              
+│   ├── deep_voices_mel                                                                                                                                                                  
+│   │   ├── andrey_preispolnilsya.npy                                                                                                                                                    
+│   │   ├── egor_dora.npy
+│   │   └── kirill_lunch.npy
+│   └── deep_voices_wav
+│       ├── andrey_preispolnilsya.wav
+│       ├── egor_dora.wav
+│       └── kirill_lunch.wav
+```      
+>>>>>>> 0e6f200 (last comments changed)
  
  Note: we trained the model with batch size 16 using 4 a100 GPUs for ~1M steps.
  
@@ -66,9 +92,9 @@ Your file structure should look like:
  ### Inference 
  
 To run inference with downloaded test-files:
-
-       python -m src.inference
-       
+```shell
+python -m src.inference
+```       
        
 To run inference with your own files or parameters:
 
@@ -113,9 +139,9 @@ Note: for correct inference and finetuning from our checkpoints, parameters: `nu
 ## ONNX
 
 Find the instructions to infer `.onnx` model in the `Inference` block. To convert trained model to `.onnx`:
-      
-      python -m srcipts.convert_to_onnx
-      
+```shell
+python -m srcipts.convert_to_onnx
+```      
       
 | Parameter  | Description |
 | ------------- | ------------- |
