@@ -42,9 +42,9 @@ Your file structure should look like:
 ```shell
 ├── data                                                                                                                                                                                 
 │   ├── awesome_checkpoints                                                                                                                                                              
-│   │   ├── do_02900000                                                                                                                                                                  
-│   │   ├── g_02900000                                                                                                                                                                   
-│   │   └── g_02900000.onnx                                                                                                                                                              
+│   │   ├── do_00975000                                                                                                                                                                  
+│   │   ├── g_00975000                                                                                                                                                                   
+│   │   └── g_00975000.onnx                                                                                                                                                              
 │   ├── deep_voices_mel                                                                                                                                                                  
 │   │   ├── andrey_preispolnilsya.npy                                                                                                                                                    
 │   │   ├── egor_dora.npy
@@ -132,6 +132,17 @@ title={{iSTFTNet}: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating In
 author={Takuhiro Kaneko and Kou Tanaka and Hirokazu Kameoka and Shogo Seki},
 booktitle={ICASSP},
 year={2022},
+}
+```
+
+```
+@misc{deepvk2023istft,
+  author = {Daria, Diatlova},
+  title = {istft-net},
+  year = {2023},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/deepvk/istft-net}}
 }
 ```
 
