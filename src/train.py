@@ -110,40 +110,40 @@ def loss_logging(
     )
 
 
+@torch.no_grad()
 def validation(generator, validation_loader, device, config, steps, args, stft):
     generator.eval()
     torch.cuda.empty_cache()
     val_err_tot = 0
-    with torch.no_grad():
-        for j, batch in enumerate(validation_loader):
-            x, y, _, y_mel = batch
-            spec, phase = generator(x.to(device))
-            y_g_hat = stft.inverse(spec, phase)
-            y_mel = y_mel.to(device)
-            y_g_hat_mel = get_mel_spectrogram(y_g_hat.squeeze(1), **config)
-            val_err_tot += F.l1_loss(y_mel, y_g_hat_mel).item()
+    for j, batch in enumerate(validation_loader):
+        x, y, _, y_mel = batch
+        spec, phase = generator(x.to(device))
+        y_g_hat = stft.inverse(spec, phase)
+        y_mel = y_mel.to(device)
+        y_g_hat_mel = get_mel_spectrogram(y_g_hat.squeeze(1), **config)
+        val_err_tot += F.l1_loss(y_mel, y_g_hat_mel).item()
 
-            if steps == 0:
-                wandb.log(
-                    {
-                        f"audio/{j}_gt": wandb.Audio(
-                            y[0].detach().cpu().numpy(), caption=f"audio/{j}_gt", sample_rate=config.sampling_rate
-                        )
-                    }
-                )
-            if steps % args.log_audio_interval == 0:
-                wandb.log(
-                    {
-                        f"audio/{j}_generated": wandb.Audio(
-                            y_g_hat[0].squeeze(0).detach().cpu().numpy(),
-                            caption=f"audio/{j}_generated",
-                            sample_rate=config.sampling_rate,
-                        )
-                    }
-                )
+        if steps == 0:
+            wandb.log(
+                {
+                    f"audio/{j}_gt": wandb.Audio(
+                        y[0].detach().cpu().numpy(), caption=f"audio/{j}_gt", sample_rate=config.sampling_rate
+                    )
+                }
+            )
+        if steps % args.log_audio_interval == 0:
+            wandb.log(
+                {
+                    f"audio/{j}_generated": wandb.Audio(
+                        y_g_hat[0].squeeze(0).detach().cpu().numpy(),
+                        caption=f"audio/{j}_generated",
+                        sample_rate=config.sampling_rate,
+                    )
+                }
+            )
 
-        val_err = val_err_tot / (j + 1)
-        wandb.log({"val_loss/mel_error": val_err})
+    val_err = val_err_tot / (j + 1)
+    wandb.log({"val_loss/mel_error": val_err})
 
 
 def _log_checkpoint_info(generator, args):
